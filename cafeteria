@@ -1,0 +1,193 @@
+import streamlit as st
+import json
+import os
+
+# ---------- FILES ----------
+USER_FILE = "users.json"
+SESSION_FILE = "session.json"  # stores who is logged in
+FEEDBACK_FILE = "feedback.json"  # stores user feedback
+
+# ---------- INITIAL SETUP ----------
+for file in [USER_FILE, SESSION_FILE, FEEDBACK_FILE]:
+    if not os.path.exists(file):
+        with open(file, "w") as f:
+            json.dump({}, f)
+
+# ---------- HELPER FUNCTIONS ----------
+def load_json(file):
+    with open(file, "r") as f:
+        return json.load(f)
+
+def save_json(file, data):
+    with open(file, "w") as f:
+        json.dump(data, f, indent=4)
+
+def load_users():
+    return load_json(USER_FILE)
+
+def save_users(users):
+    save_json(USER_FILE, users)
+
+def load_session():
+    return load_json(SESSION_FILE)
+
+def save_session(session_data):
+    save_json(SESSION_FILE, session_data)
+
+def clear_session():
+    save_session({})
+
+def create_account(email, password):
+    if not email or not password:
+        return False, "Email and password cannot be empty."
+    users = load_users()
+    if email in users:
+        return False, "Account already exists."
+    users[email] = {"password": password}
+    save_users(users)
+    return True, "Account created successfully."
+
+def authenticate(email, password):
+    users = load_users()
+    return email in users and users[email]["password"] == password
+
+# ---------- FEEDBACK ----------
+def save_feedback(email, rating, comments):
+    feedback_data = load_json(FEEDBACK_FILE)
+    feedback_data[email] = {
+        "rating": rating,
+        "comments": comments
+    }
+    save_json(FEEDBACK_FILE, feedback_data)
+
+# ---------- CAFETERIA PAGE ----------
+def cafeteria_page(user_email):
+    st.markdown(
+        "<h1 style='text-align:center; color:#6f4e37;'>☕ CAFETERIA ☕</h1>",
+        unsafe_allow_html=True
+    )
+    st.write(f"Welcome, **{user_email}**! Please select your table and order your items below 👇")
+
+    # Table Number Selection
+    table_number = st.selectbox("Select your Table Number:", list(range(1, 21)))
+
+    # Menus
+    coffee_menu = {
+        "Cappuccino": 20,
+        "Filter Coffee": 40,
+        "Americano": 60
+    }
+
+    snacks_menu = {
+        "Cookies": 10,
+        "Sandwich": 50,
+        "Samosa": 30,
+        "Toasties": 50,
+        "Teacakes": 60
+    }
+
+    st.subheader("☕ Coffee ")
+    c1, c2 = st.columns(2)
+
+    with c1:
+        coffee_choice = st.selectbox("Select your Coffee:", list(coffee_menu.keys()))
+    with c2:
+        coffee_qty = st.number_input("Coffee Quantity:", min_value=0, step=1, value=0)
+
+    st.subheader("🍪 Snacks ")
+    s1, s2 = st.columns(2)
+
+    with s1:
+        snack_choice = st.selectbox("Select your Snack:", list(snacks_menu.keys()))
+    with s2:
+        snack_qty = st.number_input("Snack Quantity:", min_value=0, step=1, value=0)
+
+    # Generate Bill
+    if st.button("🧾 Generate Bill"):
+        total = (coffee_menu[coffee_choice] * coffee_qty) + (snacks_menu[snack_choice] * snack_qty)
+
+        if coffee_qty == 0 and snack_qty == 0:
+            st.warning("⚠️ Please select at least one item to order.")
+        else:
+            st.success(f"✅ Order Summary for Table {table_number}:")
+            if coffee_qty > 0:
+                st.write(f"- {coffee_qty} x {coffee_choice} (₹{coffee_menu[coffee_choice]} each)")
+            if snack_qty > 0:
+                st.write(f"- {snack_qty} x {snack_choice} (₹{snacks_menu[snack_choice]} each)")
+            st.markdown(f"### 💰 Total Bill: ₹{total}")
+            st.balloons()
+
+            # ---------- Feedback Section ----------
+            st.markdown("---")
+            st.markdown("### 💬 Give Feedback about Cafeteria")
+            rating = st.slider("Rate your experience (1 = Poor, 5 = Excellent):", 1, 5, 3)
+            comments = st.text_area("Any comments or suggestions?")
+
+            if st.button("📨 Submit Feedback"):
+                save_feedback(user_email, rating, comments)
+                st.success("✅ Thank you for your feedback!")
+                st.snow()
+
+    # Logout Button
+    if st.button("🚪 Logout"):
+        clear_session()
+        st.session_state["logged_in"] = False
+        st.experimental_rerun()
+
+
+# ---------- LOGIN / SIGNUP PAGE ----------
+def login_page():
+    st.markdown("<h2 style='text-align:center;'>🔐 Cafeteria Login Portal</h2>", unsafe_allow_html=True)
+    page = st.sidebar.radio("Menu", ["Login", "Create New Account"])
+
+    if page == "Login":
+        st.subheader("Login to your account")
+
+        email = st.text_input("Email")
+        password = st.text_input("Password", type="password")
+
+        if st.button("Login"):
+            if authenticate(email, password):
+                st.session_state["logged_in"] = True
+                st.session_state["email"] = email
+                save_session({"logged_in": True, "email": email})
+                st.success(f"✅ Logged in successfully as {email}")
+                st.experimental_rerun()
+            else:
+                st.error("❌ Invalid email or password!")
+
+    elif page == "Create New Account":
+        st.subheader("Create a new account")
+
+        new_email = st.text_input("Enter your email", key="signup_email")
+        new_password = st.text_input("Enter password", type="password", key="signup_pwd")
+        confirm_password = st.text_input("Confirm password", type="password", key="signup_confirm")
+
+        if st.button("Sign Up"):
+            if new_password != confirm_password:
+                st.warning("⚠️ Passwords do not match!")
+            else:
+                ok, msg = create_account(new_email, new_password)
+                if ok:
+                    st.success(msg + " Please login now.")
+                else:
+                    st.error(f"⚠️ {msg}")
+
+
+# ---------- MAIN APP ----------
+st.set_page_config(page_title="Cafeteria App", page_icon="☕", layout="centered")
+
+session_data = load_session()
+
+if "logged_in" not in st.session_state:
+    st.session_state["logged_in"] = session_data.get("logged_in", False)
+    st.session_state["email"] = session_data.get("email", "")
+
+if st.session_state["logged_in"]:
+    cafeteria_page(st.session_state["email"])
+else:
+    login_page()
+
+
+
+ 
