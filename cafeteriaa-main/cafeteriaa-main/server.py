@@ -351,6 +351,10 @@ def root():
     return {"message": "Cafetaria API is running"}
 
 
+@app.get("/")
+def main_root():
+    return {"message": "Welcome to the Cafeteria API! Visit /docs for documentation."}
+
 # Include the router in the main app
 app.include_router(api_router)
 
